@@ -19,6 +19,9 @@ class Criatura(CriaturaBase):
             
             # Herda comunicação com mutação
             self.comunicacao = max(1, pai.comunicacao * random.uniform(1 - mutacao, 1 + mutacao))
+
+
+
             self.tipo_comunicacao = pai.tipo_comunicacao
             self.forma = pai.forma
             
@@ -63,8 +66,8 @@ class Criatura(CriaturaBase):
         self.direcao_fuga = None  # Direção de fuga compartilhada
         
         # Penalidades baseadas nos atributos
-        self.consumo_energia = 0.1 + (self.velocidade / 10) + (self.tamanho / 20) + (self.comunicacao / 30)
-        self.custo_reproducao = self.stamina * 0.15  # 30% da stamina para reproduzir
+        self.consumo_energia = 0.15 + (self.velocidade / 15) + (self.tamanho / 200) + (self.comunicacao / 50)
+        self.custo_reproducao = self.stamina * 0.25  # 25% da stamina para reproduzir
         
         # Calcular cor baseada nos atributos
         self._calcular_cor()
@@ -93,7 +96,7 @@ class Criatura(CriaturaBase):
         # Se estiver descansando, diminuir o tempo de descanso
         if self.tempo_descanso > 0:
             self.tempo_descanso -= 1
-            self.energia += self.stamina * 0.005  # Recupera energia ao descansar
+            self.energia += self.stamina * 0.01  # Recupera energia ao descansar
             self.energia = min(self.energia, self.stamina)  # Limitar à stamina máxima
             return True
         
@@ -190,7 +193,7 @@ class Criatura(CriaturaBase):
         self.direcao_fuga = self.direcao
         
         # Gastar mais energia ao fugir (adrenalina)
-        self.energia -= self.consumo_energia * 1.5
+        self.energia -= self.consumo_energia * 1.25
         
     def _alertar_outras_presas(self, criaturas):
         # Se não tiver direção de fuga, não pode alertar
@@ -227,7 +230,7 @@ class Criatura(CriaturaBase):
     def _reproduzir(self, criaturas):
         # Só reproduz se tiver energia suficiente e for "adulto"
         if self.energia > self.custo_reproducao and self.idade > 100 and self.ultimo_alimento < 60:
-            if random.random() < 0.01:  # 1% de chance de reproduzir a cada frame
+            if random.random() < 0.01 * self.tamanho: 
                 # Gastar energia para reproduzir
                 self.energia -= self.custo_reproducao
                 self.filhos += 1

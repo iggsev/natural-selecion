@@ -7,34 +7,37 @@ from predador import Predador
 class Canibal(CriaturaBase):
     """Classe para predadores evoluídos que podem caçar outros predadores"""
     
-    def __init__(self, x=None, y=None, velocidade=None, stamina=None, tamanho=None, velocidade_nado=None, pai=None, WIDTH=800, HEIGHT=600):
+    def __init__(self, x=None, y=None, velocidade=None, stamina=None, tamanho=None, campo=None, velocidade_nado=None, pai=None, WIDTH=800, HEIGHT=600):
         # Inicializar a classe base primeiro
         super().__init__(x, y, velocidade, stamina, None, tamanho, velocidade_nado, pai, WIDTH, HEIGHT)
         
         # Atributos específicos para canibais
         if pai and isinstance(pai, Canibal):
             # Herança de atributos já aconteceu no construtor da classe base
+            self.energia = self.stamina
             pass  # As mutações já foram aplicadas na classe base
         else:
             # Atributos para canibais novos
-            self.velocidade = velocidade if velocidade is not None else random.uniform(2.5, 4.0)
-            self.stamina = stamina if stamina is not None else random.uniform(180, 280)
+            self.velocidade = velocidade if velocidade is not None else random.uniform(3, 5)
+            self.stamina = stamina if stamina is not None else random.uniform(120 *self.tamanho, 210* self.tamanho)
             self.tamanho = tamanho if tamanho is not None else random.uniform(9, 14)
-            
+            self.campo_visao = campo if campo is not None else random.uniform(self.tamanho *10, self.tamanho*15)   # Campo de visão maior que presas
+
+            self.energia = self.stamina
+
             # Canibais vivem mais
-            self.longevidade = random.uniform(700, 1400)  # Canibais vivem ainda mais
+            self.longevidade = random.uniform(300, 600) 
             
             # Canibais são mais adaptáveis à água
             if velocidade_nado is None:
                 # Canibais são mais adaptáveis, maior chance de habilidade de nado
                 self.velocidade_nado = 0
                 if random.random() < 0.25:  # 25% de chance
-                    self.velocidade_nado = random.uniform(0.4, 1.0)
+                    self.velocidade_nado = random.uniform(0.5, 1.2)
         
         # Status dinâmicos específicos de canibais
         self.tempo_cacar = 0
         self.alvo = None
-        self.campo_visao = self.tamanho * 18  # Campo de visão maior que predadores normais
         
         # Inverso da relação entre velocidade terrestre e aquática
         # (quanto mais adaptado à água, menos adaptado ao terreno seco)
@@ -44,7 +47,7 @@ class Canibal(CriaturaBase):
             self.velocidade *= max(0.4, 1 - (self.velocidade_nado * 0.4))
         
         # Consumo de energia (mais eficiente que predadores normais devido à dieta variada)
-        self.consumo_energia = 0.12 + (self.velocidade / 10)
+        self.consumo_energia = 0.015 + (self.velocidade / 12) + (self.tamanho/50) + (self.campo_visao / 1000) 
         
         # Calcular cor baseada nos atributos
         self._calcular_cor()
@@ -88,7 +91,7 @@ class Canibal(CriaturaBase):
                             break
                     
                     # Se não encontrou nas criaturas, procurar nos predadores
-                    if not alvo_existe and predadores:
+                    if not alvo_existe and predadores and self.energia< 0.5 *self.stamina:
                         for predador in predadores:
                             if predador.id == self.alvo.id and predador.id != self.id:  # Não perseguir a si mesmo
                                 self.alvo = predador  # Atualizar referência
@@ -105,8 +108,8 @@ class Canibal(CriaturaBase):
                     self._perseguir_alvo()
                     self.tempo_cacar -= 1
             else:
-                # Decidir se vai caçar predadores ou criaturas (30% de chance de escolher predadores)
-                if predadores and random.random() < 0.3:
+                # Decidir se vai caçar predadores ou criaturas (60% de chance de escolher predadores)
+                if predadores and random.random() < 0.6 and self.energia < 0.3*self.stamina:
                     presa = self._encontrar_predador_alvo(predadores)
                     if presa:
                         self.alvo = presa
@@ -127,7 +130,7 @@ class Canibal(CriaturaBase):
                         self.tempo_cacar = 200  # Caçar por 200 frames (≈3.3 segundos a 60 FPS)
                     else:
                         # Se não encontrou criatura e houver predadores, tentar caçar predador
-                        if predadores:
+                        if predadores and self.energia < self.stamina*0.3:
                             presa = self._encontrar_predador_alvo(predadores)
                             if presa:
                                 self.alvo = presa
@@ -191,9 +194,8 @@ class Canibal(CriaturaBase):
         if not predadores_proximos:
             return None
         
-        # Escolher um predador aleatório para caçar
+            # Escolher um predador aleatório para caçar
         return random.choice(predadores_proximos)
-    
     def _perseguir_alvo(self):
         """Direciona o canibal em direção ao alvo"""
         dx = self.alvo.x - self.x
@@ -224,7 +226,7 @@ class Canibal(CriaturaBase):
                 return True
         
         # Tentar comer outros predadores
-        if predadores:
+        if predadores and self.energia < self.stamina*0.3:
             for i, predador in enumerate(predadores):
                 if predador.id != self.id and self._calcular_distancia(predador) < self.tamanho + predador.tamanho:
                     # Ganhar energia proporcional ao tamanho do predador (bônus por ser predador)
@@ -245,10 +247,10 @@ class Canibal(CriaturaBase):
     def _reproduzir(self, predadores):
         """Tenta reproduzir se tiver energia suficiente"""
         # Só reproduz se tiver energia suficiente
-        custo_reproducao = self.stamina * 0.4  # 40% da stamina para reproduzir
+        custo_reproducao = self.stamina * 0.15  
         
-        if self.energia > custo_reproducao and self.idade > 150:
-            if random.random() < 0.004:  # 0.4% de chance de reproduzir a cada frame (mais raro)
+        if self.energia > custo_reproducao and self.idade > 50:
+            if random.random() < 0.01 * self.tamanho:  # 0.4% de chance de reproduzir a cada frame (mais raro)
                 # Gastar energia para reproduzir
                 self.energia -= custo_reproducao
                 self.filhos += 1

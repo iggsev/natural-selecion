@@ -43,10 +43,10 @@ class CriaturaBase:
         else:
             # Atributos iniciais para criaturas novas
             self.velocidade = velocidade if velocidade is not None else random.uniform(1.5, 3.0)
-            self.stamina = stamina if stamina is not None else random.uniform(100, 200)
             self.longevidade = longevidade if longevidade is not None else random.uniform(500, 1000)
             self.tamanho = tamanho if tamanho is not None else random.uniform(4, 8)
-            
+            self.stamina = stamina if stamina is not None else random.uniform(self.tamanho*20, self.tamanho*50)
+
             # Velocidade de nado (normalmente inicia baixa ou zero)
             self.velocidade_nado = velocidade_nado if velocidade_nado is not None else 0
             if velocidade_nado is None and random.random() < 0.1:  # 10% de chance de ter alguma habilidade inicial

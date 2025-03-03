@@ -7,44 +7,55 @@ class Predador(CriaturaBase):
     """Classe que representa predadores carnívoros"""
     
     def __init__(self, x=None, y=None, velocidade=None, stamina=None, tamanho=None, 
-                velocidade_nado=None, pai=None, WIDTH=800, HEIGHT=600):
+                velocidade_nado=None, campo=None, pai=None, WIDTH=800, HEIGHT=600):
         # Inicializar a classe base primeiro
         super().__init__(x, y, velocidade, stamina, None, tamanho, velocidade_nado, pai, WIDTH, HEIGHT)
         
         # Atributos específicos de predadores
         # Ajustar valores específicos para predadores
         if pai and isinstance(pai, Predador):
+            self.energia = self.stamina
             # Herança de atributos já aconteceu no construtor da classe base
             pass  # As mutações já foram aplicadas na classe base
         else:
             # Atributos para predadores novos (quando não vem de mutação)
             self.velocidade = velocidade if velocidade is not None else random.uniform(2.0, 3.5)
-            self.stamina = stamina if stamina is not None else random.uniform(1500, 2500)
+            self.stamina = stamina if stamina is not None else random.uniform(100 *self.tamanho, 200* self.tamanho)
             self.tamanho = tamanho if tamanho is not None else random.uniform(8, 12)
-            
+            self.campo_visao = campo if campo is not None else random.uniform(self.tamanho *25, self.tamanho*100)   # Campo de visão maior que presas
+
+            self.energia = self.stamina
             # Predadores vivem mais tempo
-            self.longevidade = random.uniform(600, 1200)  # Predadores vivem um pouco mais
+            self.longevidade = random.uniform(600, 1000)  # Predadores vivem um pouco menos
         
         # Status dinâmicos específicos de predadores
         self.tempo_cacar = 0
         self.alvo = None
-        self.campo_visao = self.tamanho * 15  # Campo de visão maior que presas
         
-        # Consumo de energia (predadores gastam mais)
-        self.consumo_energia = 0.1 + (self.velocidade / 10)
+        # Consumo de energia 
+        self.consumo_energia = 0.1 + (self.velocidade / 20) + (self.tamanho/100) 
         self.custo_reproducao = self.energia * 0.15
 
         # Calcular cor com base nos atributos
         self._calcular_cor()
     
     def _calcular_cor(self):
-        """Define a cor baseada nos atributos do predador"""
-        # Base: vermelho claro para predadores normais
-        r = 220
+        """Define a cor baseada nos atributos do canibal"""
+        # Cálculo da cor baseada nos atributos (roxo para canibais)
+        r = 150
+        g = 0
+        b = 255  # Roxo
+        
         # Componente azul baseado na velocidade
-        b = min(255, int(self.velocidade * 40))
-        # Componente verde baseado na stamina
-        g = min(100, int(self.stamina / 5))
+        b = min(255, int(b + self.velocidade * 15))
+        # Componente vermelho baseado na stamina
+        r = min(220, int(r + self.stamina / 10))
+        
+        # Adiciona mais azul para canibais com alta velocidade de nado
+        if self.velocidade_nado > 0:
+            b = min(255, b + int(self.velocidade_nado * 40))
+            # Reduz levemente o vermelho para dar aparência mais aquática
+            r = max(100, r - int(self.velocidade_nado * 30))
         
         self.cor = (r, g, b)
     
@@ -118,17 +129,6 @@ class Predador(CriaturaBase):
         if self._cacar(criaturas):
             # Se conseguiu caçar, tenta reproduzir
             self._reproduzir(predadores)
-            
-            # Pequena chance de evoluir para canibal
-            if random.random() < 0.05 and self.energia > self.stamina * 0.8:
-                # Importação local para evitar circular import
-                from canibal import Canibal
-                novo_canibal = Canibal(x=self.x, y=self.y, velocidade=self.velocidade, 
-                                     stamina=self.stamina, tamanho=self.tamanho, 
-                                     velocidade_nado=self.velocidade_nado,
-                                     WIDTH=self.WIDTH, HEIGHT=self.HEIGHT)
-                predadores.append(novo_canibal)
-                return False  # O predador se transforma em canibal
         
         return True  # Continua vivo
     
@@ -163,7 +163,7 @@ class Predador(CriaturaBase):
         for i, criatura in enumerate(criaturas):
             if self._calcular_distancia(criatura) < self.tamanho + criatura.tamanho:
                 # Ganhar energia proporcional ao tamanho da criatura
-                ganho_energia = criatura.tamanho * 50 + criatura.energia * 5
+                ganho_energia = criatura.tamanho * 100 + criatura.energia * 10
                 self.energia += ganho_energia
                 self.energia = min(self.energia, self.stamina)  # Limitar à stamina máxima
                 
@@ -180,8 +180,8 @@ class Predador(CriaturaBase):
     def _reproduzir(self, predadores):
         """Tenta reproduzir se tiver energia suficiente"""
         
-        if self.energia > self.custo_reproducao and self.idade > 20:
-            if random.random() < 0.1:  # 0.5% de chance de reproduzir a cada frame
+        if self.energia > self.custo_reproducao and self.idade > 100:
+            if random.random() < 0.01 * self.tamanho: 
                 # Gastar energia para reproduzir
                 self.energia -= self.custo_reproducao
                 self.filhos += 1

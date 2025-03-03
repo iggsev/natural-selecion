@@ -1,11 +1,14 @@
 import pygame
 import random
+import math
 from criatura import Criatura
 from predador import Predador
 from canibal import Canibal
 from alimento import Alimento
 from mapa import Mapa
 from efeito_visual import EfeitoVisual
+from editor_tools import EditorTools
+from touch_controls import TouchControls
 
 class Simulacao:
     def __init__(self, WIDTH=800, HEIGHT=600):
@@ -49,6 +52,10 @@ class Simulacao:
             'tempo_total': 0,
             'geracoes': 0
         }
+        
+        # Ferramentas de edição e controles de toque
+        self.editor = None  # Será inicializado após a inicialização da simulação
+        self.touch_controls = None  # Será inicializado após a inicialização da simulação
     
     def inicializar(self, configuracoes=None):
         # Configurações padrão se não fornecidas
@@ -199,6 +206,15 @@ class Simulacao:
         # Resetar sistema de fim de jogo
         self.jogo_finalizado = False
         self.vencedor = None
+        
+        # Inicializar ferramentas de edição se ainda não existirem
+        if self.editor is None:
+            self.editor = EditorTools(self, self.WIDTH, self.HEIGHT)
+            
+        # Inicializar controles sensíveis ao toque
+        from touch_controls import TouchControls
+        if self.touch_controls is None:
+            self.touch_controls = TouchControls(self.WIDTH, self.HEIGHT)
     
     def _criar_entidade_em_posicao_valida(self, classe_entidade):
         """Cria uma nova entidade em uma posição válida (sem colisão com paredes)"""
@@ -244,7 +260,15 @@ class Simulacao:
         # Se não conseguir após muitas tentativas, retorna None
         return None
     
-    def atualizar(self):
+    def atualizar(self, dt=1.0/60.0, mouse_pos=None):
+        # Atualizar as ferramentas de edição
+        if self.editor:
+            self.editor.atualizar(dt)
+        
+        # Atualizar controles sensíveis ao toque
+        if self.touch_controls and mouse_pos:
+            self.touch_controls.update(mouse_pos)
+            
         if self.pausa or self.jogo_finalizado:
             return
         
@@ -493,11 +517,13 @@ class Simulacao:
             # Se o jogo terminou, desenhar tela de estatísticas finais
             self._desenhar_estatisticas_finais(superficie)
         else:
-            # Desenhar estatísticas normais durante o jogo
-            self._desenhar_estatisticas(superficie)
-            
-            # Desenhar controles
-            self._desenhar_controles(superficie)
+            # Desenhar os controles sensíveis ao toque
+            if self.touch_controls:
+                self.touch_controls.draw(superficie)
+        
+        # Desenhar interface de editor por último (para sobrepor tudo)
+        if self.editor and self.editor.ativo:
+            self.editor.desenhar(superficie)
     
     def _desenhar_estatisticas_finais(self, superficie):
         """Desenha a tela de estatísticas finais quando o jogo termina"""
@@ -611,91 +637,38 @@ class Simulacao:
             for i, texto in enumerate(textos_forte):
                 superficie.blit(self.fonte.render(texto, True, (255, 150, 150)), (self.WIDTH//2 + 50, y_pos_forte + 25 + i * 25))
         
-        # Desenhar instruções
-        texto_instrucao = self.fonte_titulo.render("Pressione SPACE para voltar ao menu ou R para reiniciar", True, (255, 255, 255))
-        superficie.blit(texto_instrucao, (self.WIDTH//2 - texto_instrucao.get_width()//2, self.HEIGHT - 80))
-    
-    def _desenhar_estatisticas(self, superficie):
-        # Fundo semi-transparente para as estatísticas
-        s = pygame.Surface((250, 200))  # Aumentado para incluir informação de canibais
-        s.set_alpha(180)
-        s.fill((30, 30, 30))
-        superficie.blit(s, (10, 10))
+        # Botão grande para voltar ao menu
+        botao_voltar = pygame.Rect(self.WIDTH//2 - 150, self.HEIGHT - 80, 300, 60)
+        pygame.draw.rect(superficie, (50, 50, 80), botao_voltar, 0, 15)  # Botão arredondado
+        pygame.draw.rect(superficie, (255, 255, 255), botao_voltar, 2, 15)  # Borda
         
-        # Título
-        texto_titulo = self.fonte_titulo.render("Estatísticas", True, (255, 255, 255))
-        superficie.blit(texto_titulo, (15, 15))
-        
-        # Informações principais
-        estatisticas_texto = [
-            f"Geração: {self.estatisticas['geracao']}",
-            f"População: {self.estatisticas['populacao']} (Pico: {self.estatisticas['populacao_pico']})",
-            f"Total de criaturas: {self.estatisticas['total_criaturas']}",
-            f"Predadores: {self.estatisticas['predadores_ativos']}",
-            f"Canibais: {self.estatisticas['canibais_ativos']}",
-            f"Alimentos: {len(self.alimentos)}",
-            f"Idade média: {self.estatisticas['idade_media']:.1f}",
-            f"Velocidade média: {self.estatisticas['velocidade_media']:.2f}",
-            f"Stamina média: {self.estatisticas['stamina_media']:.1f}",
-            f"Tamanho médio: {self.estatisticas['tamanho_medio']:.2f}"
-        ]
-        
-        for i, texto in enumerate(estatisticas_texto):
-            superficie.blit(self.fonte.render(texto, True, (255, 255, 255)), (15, 50 + i * 20))
-    
-    def _desenhar_controles(self, superficie):
-        # Fundo semi-transparente para os controles
-        s = pygame.Surface((250, 100))
-        s.set_alpha(180)
-        s.fill((30, 30, 30))
-        superficie.blit(s, (10, self.HEIGHT - 110))
-        
-        # Título
-        texto_titulo = self.fonte_titulo.render("Controles", True, (255, 255, 255))
-        superficie.blit(texto_titulo, (15, self.HEIGHT - 105))
-        
-        # Instruções
-        controles_texto = [
-            "P: Pausar/Continuar",
-            "R: Reiniciar simulação",
-            "+/-: Aumentar/Diminuir velocidade",
-            "A: Adicionar alimento"
-        ]
-        
-        for i, texto in enumerate(controles_texto):
-            superficie.blit(self.fonte.render(texto, True, (255, 255, 255)), (15, self.HEIGHT - 80 + i * 20))
+        texto_voltar = self.fonte_titulo.render("Voltar ao Menu", True, (255, 255, 255))
+        superficie.blit(texto_voltar, (self.WIDTH//2 - texto_voltar.get_width()//2, self.HEIGHT - 65))
     
     def processar_eventos(self, evento):
-        if evento.type == pygame.KEYDOWN:
-            # Se o jogo terminou, aceitar apenas os comandos de reinício/menu
-            if self.jogo_finalizado:
-                if evento.key == pygame.K_r:
-                    # Reiniciar a simulação
-                    self.jogo_finalizado = False
-                    self.inicializar()
-                    return None
-                elif evento.key == pygame.K_SPACE:
-                    # Voltar ao menu
-                    return "voltar_menu"
-            else:
-                # Comandos disponíveis durante o jogo
-                if evento.key == pygame.K_p:
-                    # Pausar/Continuar
-                    self.pausa = not self.pausa
-                elif evento.key == pygame.K_r:
-                    # Sinalizar para voltar ao menu
-                    # Não inicializamos aqui, pois main.py precisa voltar ao menu
-                    return "voltar_menu"
-                elif evento.key == pygame.K_EQUALS or evento.key == pygame.K_PLUS:
-                    # Aumentar velocidade
-                    self.aceleracao = min(10, self.aceleracao + 1)
-                elif evento.key == pygame.K_MINUS:
-                    # Diminuir velocidade
-                    self.aceleracao = max(1, self.aceleracao - 1)
-                elif evento.key == pygame.K_a:
-                    # Adicionar alimento
-                    alimento = self._criar_alimento_em_posicao_valida()
-                    if alimento:
-                        self.alimentos.append(alimento)
+        # Primeiro processamos eventos do editor, se existir e estiver ativo
+        if self.editor and self.editor.ativo:
+            self.editor.processar_eventos(evento)
+            return None
         
+        # Processar eventos dos controles sensíveis ao toque
+        if self.touch_controls:
+            # Atualizar estado dos botões com a posição do mouse
+            if evento.type == pygame.MOUSEMOTION:
+                self.touch_controls.update(evento.pos)
+            
+            # Processar cliques nos controles de toque
+            resultado = self.touch_controls.handle_event(evento, self)
+            if resultado:
+                return resultado
+        
+        # Se o jogo terminou, aceitar apenas o comando de voltar para o menu
+        if self.jogo_finalizado and evento.type == pygame.MOUSEBUTTONDOWN:
+            # Criar um botão simples para voltar ao menu no centro da tela
+            centro_x, centro_y = self.WIDTH // 2, self.HEIGHT - 80
+            botao_voltar = pygame.Rect(centro_x - 150, centro_y, 300, 60)
+            
+            if botao_voltar.collidepoint(evento.pos):
+                return "voltar_menu"
+                
         return None

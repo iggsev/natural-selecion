@@ -40,8 +40,8 @@ class Predador(CriaturaBase):
         self._calcular_cor()
     
     def _calcular_cor(self):
-        """Define a cor baseada nos atributos do canibal"""
-        # Cálculo da cor baseada nos atributos (roxo para canibais)
+        """Define a cor baseada nos atributos do predador"""
+        # Cálculo da cor baseada nos atributos (roxo para predadores)
         r = 150
         g = 0
         b = 255  # Roxo
@@ -51,7 +51,7 @@ class Predador(CriaturaBase):
         # Componente vermelho baseado na stamina
         r = min(220, int(r + self.stamina / 10))
         
-        # Adiciona mais azul para canibais com alta velocidade de nado
+        # Adiciona mais azul para predadores com alta velocidade de nado
         if self.velocidade_nado > 0:
             b = min(255, b + int(self.velocidade_nado * 40))
             # Reduz levemente o vermelho para dar aparência mais aquática
@@ -66,8 +66,15 @@ class Predador(CriaturaBase):
         
         # Se não estiver com direção bloqueada pelo terreno
         if not hasattr(self, 'direção_bloqueada') or not self.direção_bloqueada:
+            # Verificar se está perto de uma parede e evitar se necessário
+            if mapa and self._esta_perto_de_parede(mapa):
+                self._evitar_parede(mapa)
+            # Verificar se está em água e não sabe nadar
+            elif mapa and self.esta_nadando and self.velocidade_nado <= 0:
+                # Prioridade máxima: sair da água a qualquer custo
+                self._buscar_saida_agua(mapa)
             # Se já está caçando um alvo
-            if self.alvo:
+            elif self.alvo:
                 # Verificar se o alvo ainda existe
                 alvo_existe = False
                 
@@ -85,11 +92,19 @@ class Predador(CriaturaBase):
                     self._movimento_aleatorio()
                 else:
                     # Perseguir alvo
-                    self._perseguir_alvo()
-                    self.tempo_cacar -= 1
+                    if not self._perseguir_alvo(mapa):
+                        # Se não conseguiu perseguir (água ou parede no caminho), procura outro alvo
+                        presa = self._encontrar_presa(criaturas, mapa)
+                        if presa:
+                            self.alvo = presa
+                            self.tempo_cacar = 200
+                        else:
+                            self._movimento_aleatorio()
+                    else:
+                        self.tempo_cacar -= 1
             else:
                 # Encontrar novo alvo
-                presa = self._encontrar_presa(criaturas)
+                presa = self._encontrar_presa(criaturas, mapa)
                 if presa:
                     self.alvo = presa
                     self.tempo_cacar = 200  # Caçar por 200 frames (≈3.3 segundos a 60 FPS)
@@ -131,8 +146,44 @@ class Predador(CriaturaBase):
             self._reproduzir(predadores)
         
         return True  # Continua vivo
+
+    def _buscar_saida_agua(self, mapa):
+        """Tenta encontrar e se mover em direção à terra mais próxima"""
+        # Verificar em várias direções para encontrar terra
+        direcoes_teste = 12  # Número de direções a verificar
+        melhor_direcao = None
+        menor_distancia = float('inf')
+        
+        for i in range(direcoes_teste):
+            angulo = (2 * math.pi / direcoes_teste) * i
+            distancia_teste = 5  # Começa próximo
+            max_distancia = 200  # Limite de busca
+            
+            # Continua verificando na direção até encontrar terra ou atingir o limite
+            while distancia_teste < max_distancia:
+                pos_x = self.x + math.cos(angulo) * distancia_teste
+                pos_y = self.y + math.sin(angulo) * distancia_teste
+                
+                # Verificar se está dentro dos limites e se é terra
+                if (0 <= pos_x < self.WIDTH and 0 <= pos_y < self.HEIGHT):
+                    terreno = mapa.obter_terreno(pos_x, pos_y)
+                    if terreno.nome != "Água":
+                        # Encontrou terra, verificar se é a mais próxima
+                        if distancia_teste < menor_distancia:
+                            menor_distancia = distancia_teste
+                            melhor_direcao = angulo
+                        break
+                
+                distancia_teste += 20  # Incrementa a distância de busca
+        
+        # Se encontrou terra, move-se nessa direção
+        if melhor_direcao is not None:
+            self.direcao = melhor_direcao
+        else:
+            # Se não encontrou terra, move-se em uma direção aleatória
+            self.direcao = random.uniform(0, 2 * math.pi)
     
-    def _encontrar_presa(self, criaturas):
+    def _encontrar_presa(self, criaturas, mapa=None):
         """Encontra uma presa potencial dentro do campo de visão"""
         if not criaturas:
             return None
@@ -142,15 +193,56 @@ class Predador(CriaturaBase):
         
         if not presas_proximas:
             return None
+            
+        # Se tiver mapa e o predador não sabe nadar, filtrar presas que não têm água ou paredes no caminho
+        if mapa:
+            presas_seguras = []
+            for presa in presas_proximas:
+                seguro = True
+                
+                # Verificar água no caminho
+                if self.velocidade_nado <= 0 and self._ha_agua_no_caminho(presa.x, presa.y, mapa):
+                    seguro = False
+                
+                # Verificar parede no caminho ou se a presa está perto demais de uma parede
+                if seguro and self._ha_parede_no_caminho(presa.x, presa.y, mapa):
+                    seguro = False
+                    
+                if seguro:
+                    presas_seguras.append(presa)
+            
+            # Se houver presas seguras, escolhe uma delas
+            if presas_seguras:
+                return random.choice(presas_seguras)
+                
+            # Se não houver presas seguras mas o predador estiver com muita fome, pode arriscar
+            elif self.energia < self.stamina * 0.2:
+                # 50% de chance de arriscar quando está com muita fome
+                if random.random() < 0.5:
+                    return random.choice(presas_proximas)
+                return None
+            else:
+                return None
         
-        # Escolher uma presa aleatória entre as próximas (mais realista)
+        # Se não tiver mapa, escolher uma presa aleatória entre as próximas
         return random.choice(presas_proximas)
     
-    def _perseguir_alvo(self):
+    def _perseguir_alvo(self, mapa=None):
         """Direciona o predador em direção ao alvo"""
+        # Se tiver mapa, verificar se há água ou parede no caminho
+        if mapa:
+            if (self.velocidade_nado <= 0 and self._ha_agua_no_caminho(self.alvo.x, self.alvo.y, mapa)) or \
+               (self._ha_parede_no_caminho(self.alvo.x, self.alvo.y, mapa)):
+                # Se há água no caminho e não sabe nadar, ou há parede no caminho, para de perseguir o alvo
+                self.alvo = None
+                self.tempo_cacar = 0
+                return False
+                
+        # Persegue normalmente
         dx = self.alvo.x - self.x
         dy = self.alvo.y - self.y
         self.direcao = math.atan2(dy, dx)
+        return True
     
     def _movimento_aleatorio(self):
         """Faz o predador se mover aleatoriamente"""
@@ -190,7 +282,7 @@ class Predador(CriaturaBase):
                 offset_x = random.uniform(-20, 20)
                 offset_y = random.uniform(-20, 20)
                 
-                # 15% de chance de mutação para canibal durante a reprodução
+                # 5% de chance de mutação para canibal durante a reprodução
                 if random.random() < 0.05:
                     # Importação local para evitar circular import
                     from canibal import Canibal

@@ -35,11 +35,18 @@ class CriaturaBase:
             # Herda velocidade de nado com mutação
             if hasattr(pai, 'velocidade_nado'):
                 self.velocidade_nado = max(0, pai.velocidade_nado * random.uniform(1 - mutacao, 1 + mutacao))
+                # 5% de chance de mutação que altera significativamente a velocidade de nado
+                if random.random() < 0.05:
+                    if self.velocidade_nado > 0:
+                        # Possibilidade de perder a habilidade
+                        if random.random() < 0.2:
+                            self.velocidade_nado = 0
+                    else:
+                        # Possibilidade de ganhar a habilidade
+                        if random.random() < 0.2:
+                            self.velocidade_nado = random.uniform(0.3, 0.7)
             else:
                 self.velocidade_nado = 0
-                # Chance de desenvolver velocidade de nado
-                if random.random() < 0.05:
-                    self.velocidade_nado = random.uniform(0.3, 0.7)
         else:
             # Atributos iniciais para criaturas novas
             self.velocidade = velocidade if velocidade is not None else random.uniform(1.5, 3.0)
@@ -47,9 +54,9 @@ class CriaturaBase:
             self.tamanho = tamanho if tamanho is not None else random.uniform(4, 8)
             self.stamina = stamina if stamina is not None else random.uniform(self.tamanho*20, self.tamanho*50)
 
-            # Velocidade de nado (normalmente inicia baixa ou zero)
+            # Velocidade de nado (agora com apenas 5% de chance de ter habilidade inicial)
             self.velocidade_nado = velocidade_nado if velocidade_nado is not None else 0
-            if velocidade_nado is None and random.random() < 0.1:  # 10% de chance de ter alguma habilidade inicial
+            if velocidade_nado is None and random.random() < 0.05:  # 5% de chance de ter alguma habilidade inicial
                 self.velocidade_nado = random.uniform(0.3, 0.8)
         
         # Status dinâmicos
@@ -65,6 +72,10 @@ class CriaturaBase:
         self.esta_nadando = False
         self.contador_nado = 0
         self.amplitude_nado = random.uniform(0.5, 1.5)
+        
+        # Detector de terreno próximo (para evitar água se não souber nadar)
+        self.detectar_distancia = 30  # Distância para detectar água à frente
+        self.distancia_seguranca_parede = self.tamanho * 3  # Distância mínima para manter de paredes
         
         # Ajuste de velocidade baseado na adaptação aquática
         if self.velocidade_nado > 0:
@@ -95,6 +106,205 @@ class CriaturaBase:
         """Calcula a distância entre esta criatura e outra entidade"""
         return math.sqrt((self.x - outro.x) ** 2 + (self.y - outro.y) ** 2)
     
+    def _detectar_agua_a_frente(self, mapa):
+        """Detecta se há água na direção do movimento"""
+        if not mapa:
+            return False
+            
+        # Calcula posição à frente baseada na direção atual
+        pos_x = self.x + math.cos(self.direcao) * self.detectar_distancia
+        pos_y = self.y + math.sin(self.direcao) * self.detectar_distancia
+        
+        # Verifica se a posição está dentro dos limites do mapa
+        if 0 <= pos_x < self.WIDTH and 0 <= pos_y < self.HEIGHT:
+            terreno_a_frente = mapa.obter_terreno(pos_x, pos_y)
+            # Retorna True se for água e a criatura não sabe nadar
+            return terreno_a_frente.nome == "Água" and self.velocidade_nado <= 0
+        
+        return False
+    
+    def _ha_agua_no_caminho(self, destino_x, destino_y, mapa, distancia_verificacao=50):
+        """Verifica se há água no caminho entre a criatura e o destino"""
+        if not mapa or self.velocidade_nado > 0:
+            # Se não há mapa ou a criatura sabe nadar, não precisa verificar
+            return False
+            
+        # Distância total até o destino
+        distancia_total = math.sqrt((destino_x - self.x)**2 + (destino_y - self.y)**2)
+        
+        # Se a distância for muito pequena, não precisa verificar
+        if distancia_total < 10:
+            return False
+            
+        # Ângulo em direção ao destino
+        angulo = math.atan2(destino_y - self.y, destino_x - self.x)
+        
+        # Número de pontos a verificar (mais pontos para distâncias maiores)
+        num_pontos = min(10, max(3, int(distancia_total / 20)))
+        
+        # Verifica vários pontos ao longo do caminho
+        for i in range(1, num_pontos + 1):
+            # Posição do ponto a verificar (distribuído ao longo do caminho)
+            fator = i / (num_pontos + 1)  # Evita verificar exatamente no início e no fim
+            check_x = self.x + (destino_x - self.x) * fator
+            check_y = self.y + (destino_y - self.y) * fator
+            
+            # Verifica se o ponto está dentro dos limites do mapa
+            if 0 <= check_x < self.WIDTH and 0 <= check_y < self.HEIGHT:
+                terreno = mapa.obter_terreno(check_x, check_y)
+                if terreno.nome == "Água":
+                    return True  # Encontrou água no caminho
+        
+        # Também verifica se há água nas proximidades do caminho
+        # (para criar um comportamento mais cauteloso)
+        for i in range(1, num_pontos + 1):
+            fator = i / (num_pontos + 1)
+            check_x = self.x + (destino_x - self.x) * fator
+            check_y = self.y + (destino_y - self.y) * fator
+            
+            # Verifica pontos perpendiculares ao caminho
+            perpendicular_angulo = angulo + math.pi/2
+            offset = 15  # Distância lateral para verificar
+            
+            # Verifica à direita do caminho
+            check_x_right = check_x + math.cos(perpendicular_angulo) * offset
+            check_y_right = check_y + math.sin(perpendicular_angulo) * offset
+            
+            # Verifica à esquerda do caminho
+            check_x_left = check_x - math.cos(perpendicular_angulo) * offset
+            check_y_left = check_y - math.sin(perpendicular_angulo) * offset
+            
+            if (0 <= check_x_right < self.WIDTH and 0 <= check_y_right < self.HEIGHT and
+                mapa.obter_terreno(check_x_right, check_y_right).nome == "Água"):
+                return True
+                
+            if (0 <= check_x_left < self.WIDTH and 0 <= check_y_left < self.HEIGHT and
+                mapa.obter_terreno(check_x_left, check_y_left).nome == "Água"):
+                return True
+        
+        return False  # Não encontrou água no caminho
+    
+    def _esta_perto_de_parede(self, mapa, x=None, y=None, distancia=None):
+        """Verifica se a criatura está perto de uma parede"""
+        if not mapa:
+            return False
+        
+        # Usar posição fornecida ou atual da criatura
+        pos_x = x if x is not None else self.x
+        pos_y = y if y is not None else self.y
+        
+        # Usar distância fornecida ou a padrão da criatura
+        dist = distancia if distancia is not None else self.distancia_seguranca_parede
+        
+        # Verificar se alguma parede está próxima
+        for parede in mapa.paredes:
+            # Encontra o ponto mais próximo na parede
+            closest_x = max(parede.rect.left, min(pos_x, parede.rect.right))
+            closest_y = max(parede.rect.top, min(pos_y, parede.rect.bottom))
+            
+            # Calcula a distância entre o ponto e a parede
+            distancia_x = pos_x - closest_x
+            distancia_y = pos_y - closest_y
+            distancia_parede = math.sqrt(distancia_x**2 + distancia_y**2)
+            
+            if distancia_parede < dist:
+                return True
+                
+        return False
+    
+    def _ha_parede_no_caminho(self, destino_x, destino_y, mapa):
+        """Verifica se há parede no caminho entre a criatura e o destino"""
+        if not mapa:
+            return False
+            
+        # Distância total até o destino
+        distancia_total = math.sqrt((destino_x - self.x)**2 + (destino_y - self.y)**2)
+        
+        # Se a distância for muito pequena, não precisa verificar
+        if distancia_total < 10:
+            return False
+            
+        # Número de pontos a verificar (mais pontos para distâncias maiores)
+        num_pontos = min(10, max(3, int(distancia_total / 20)))
+        
+        # Verifica vários pontos ao longo do caminho
+        for i in range(1, num_pontos + 1):
+            # Posição do ponto a verificar
+            fator = i / (num_pontos + 1)
+            check_x = self.x + (destino_x - self.x) * fator
+            check_y = self.y + (destino_y - self.y) * fator
+            
+            # Verifica se o ponto está perto de uma parede
+            if self._esta_perto_de_parede(mapa, check_x, check_y, self.distancia_seguranca_parede * 0.8):
+                return True  # Encontrou parede no caminho
+        
+        # Verifica se o destino está perto de uma parede
+        if self._esta_perto_de_parede(mapa, destino_x, destino_y, self.distancia_seguranca_parede):
+            return True  # O destino está muito perto de uma parede
+            
+        return False  # Não encontrou parede no caminho
+    
+    def _direção_fuga_parede(self, mapa):
+        """Calcula a direção para fugir da parede mais próxima"""
+        if not mapa:
+            return None
+            
+        parede_mais_proxima = None
+        ponto_mais_proximo = None
+        menor_distancia = float('inf')
+        
+        # Encontrar a parede mais próxima
+        for parede in mapa.paredes:
+            # Encontra o ponto mais próximo na parede
+            closest_x = max(parede.rect.left, min(self.x, parede.rect.right))
+            closest_y = max(parede.rect.top, min(self.y, parede.rect.bottom))
+            
+            # Calcula a distância entre a criatura e o ponto na parede
+            distancia_x = self.x - closest_x
+            distancia_y = self.y - closest_y
+            distancia = math.sqrt(distancia_x**2 + distancia_y**2)
+            
+            if distancia < menor_distancia:
+                menor_distancia = distancia
+                parede_mais_proxima = parede
+                ponto_mais_proximo = (closest_x, closest_y)
+        
+        if ponto_mais_proximo:
+            # Calcular ângulo na direção oposta à parede
+            dx = self.x - ponto_mais_proximo[0]
+            dy = self.y - ponto_mais_proximo[1]
+            
+            # Se a distância for muito pequena, adicionar um pequeno offset aleatório
+            # para evitar divisão por zero
+            if abs(dx) < 0.1 and abs(dy) < 0.1:
+                dx += random.uniform(-1, 1)
+                dy += random.uniform(-1, 1)
+                
+            return math.atan2(dy, dx)
+            
+        return None
+    
+    def _evitar_agua(self):
+        """Muda a direção para evitar água detectada à frente"""
+        # Muda a direção para uma direção perpendicular
+        novo_angulo = self.direcao + random.choice([math.pi/2, -math.pi/2])
+        self.direcao = novo_angulo % (2 * math.pi)  # Normaliza o ângulo
+    
+    def _evitar_parede(self, mapa):
+        """Ajusta a direção para evitar colidir com paredes"""
+        # Obter direção de fuga da parede
+        direcao_fuga = self._direção_fuga_parede(mapa)
+        
+        if direcao_fuga is not None:
+            # Ajusta a direção para a direção de fuga
+            self.direcao = direcao_fuga
+            
+            # Adiciona um pequeno desvio aleatório para comportamento mais natural
+            self.direcao += random.uniform(-0.2, 0.2)
+            return True
+            
+        return False
+    
     def atualizar(self, *args, **kwargs):
         """Método base de atualização a ser implementado pelas subclasses"""
         # Verificar se morreu de velhice
@@ -113,23 +323,25 @@ class CriaturaBase:
         self.esta_nadando = False
         if 'mapa' in kwargs and kwargs['mapa']:
             mapa = kwargs['mapa']
+            
+            # Verificar se está perto de uma parede e evitar se necessário
+            if self._esta_perto_de_parede(mapa):
+                self._evitar_parede(mapa)
+            
+            # Detectar água à frente e evitar se não souber nadar
+            if self._detectar_agua_a_frente(mapa):
+                self._evitar_agua()
+            
             terreno_atual = mapa.obter_terreno(self.x, self.y)
             if terreno_atual.nome == "Água":
                 self.esta_nadando = True
                 self.contador_nado += 0.2
                 
-                # Verificar se está se afogando (sem velocidade de nado)
+                # A criatura está na água mas não sabe nadar - efeito de desespero
                 if self.velocidade_nado <= 0:
-                    # Chance de desenvolver velocidade de nado em situação de quase afogamento
-                    if random.random() < 0.001:  # Chance muito baixa
-                        self.velocidade_nado = random.uniform(0.2, 0.4)
-                        # Efeito visual de adaptação
-                        if hasattr(mapa, 'simulacao') and hasattr(mapa.simulacao, 'efeitos'):
-                            mapa.simulacao.efeitos.adicionar_texto_flutuante(
-                                self.x, self.y - 20,
-                                "Adaptação aquática!",
-                                (0, 200, 255)
-                            )
+                    # Tentar sair da água com movimentos mais rápidos e aleatórios
+                    if random.random() < 0.3:  # 30% de chance de mudar direção em pânico
+                        self.direcao = random.uniform(0, 2 * math.pi)
         
         # Como uma última linha de defesa, forçar limites absolutos do mapa
         self._aplicar_limites_absolutos()

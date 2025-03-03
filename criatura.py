@@ -20,8 +20,6 @@ class Criatura(CriaturaBase):
             # Herda comunicação com mutação
             self.comunicacao = max(1, pai.comunicacao * random.uniform(1 - mutacao, 1 + mutacao))
 
-
-
             self.tipo_comunicacao = pai.tipo_comunicacao
             self.forma = pai.forma
             
@@ -119,7 +117,15 @@ class Criatura(CriaturaBase):
             
         # Decidir próxima ação (se não estiver com direção bloqueada pelo terreno)
         if not self.direção_bloqueada:
-            if self.alertada and self.direcao_fuga is not None:
+            # Verificar se está perto de uma parede e evitar se necessário
+            if mapa and self._esta_perto_de_parede(mapa):
+                self._evitar_parede(mapa)
+            # Verificar se está em água e não sabe nadar
+            elif mapa and self.esta_nadando and self.velocidade_nado <= 0:
+                # Prioridade máxima: sair da água a qualquer custo
+                # Encontrar a terra mais próxima
+                self._buscar_saida_agua(mapa)
+            elif self.alertada and self.direcao_fuga is not None:
                 # Se foi alertada, usar a direção de fuga compartilhada
                 self.direcao = self.direcao_fuga
             elif len(self.predadores_detectados) > 0:
@@ -131,7 +137,7 @@ class Criatura(CriaturaBase):
                 self.tempo_alerta = 60  # 1 segundo de alerta (60 frames)
             else:
                 # Se não há predadores, procurar comida
-                alimento_proximo = self._alimento_mais_proximo(alimentos)
+                alimento_proximo = self._alimento_mais_proximo(alimentos, mapa)
                 if alimento_proximo:
                     self._buscar_alimento(alimento_proximo)
                 else:
@@ -164,18 +170,75 @@ class Criatura(CriaturaBase):
         # Tentar reproduzir
         self._reproduzir(criaturas)
     
-        
         return True  # Continua vivo
     
-    def _alimento_mais_proximo(self, alimentos):
+    def _buscar_saida_agua(self, mapa):
+        """Tenta encontrar e se mover em direção à terra mais próxima"""
+        # Verificar em várias direções para encontrar terra
+        direcoes_teste = 12  # Número de direções a verificar
+        melhor_direcao = None
+        menor_distancia = float('inf')
+        
+        for i in range(direcoes_teste):
+            angulo = (2 * math.pi / direcoes_teste) * i
+            distancia_teste = 5  # Começa próximo
+            max_distancia = 200  # Limite de busca
+            
+            # Continua verificando na direção até encontrar terra ou atingir o limite
+            while distancia_teste < max_distancia:
+                pos_x = self.x + math.cos(angulo) * distancia_teste
+                pos_y = self.y + math.sin(angulo) * distancia_teste
+                
+                # Verificar se está dentro dos limites e se é terra
+                if (0 <= pos_x < self.WIDTH and 0 <= pos_y < self.HEIGHT):
+                    terreno = mapa.obter_terreno(pos_x, pos_y)
+                    if terreno.nome != "Água":
+                        # Encontrou terra, verificar se é a mais próxima
+                        if distancia_teste < menor_distancia:
+                            menor_distancia = distancia_teste
+                            melhor_direcao = angulo
+                        break
+                
+                distancia_teste += 20  # Incrementa a distância de busca
+        
+        # Se encontrou terra, move-se nessa direção
+        if melhor_direcao is not None:
+            self.direcao = melhor_direcao
+        else:
+            # Se não encontrou terra, move-se em uma direção aleatória
+            self.direcao = random.uniform(0, 2 * math.pi)
+
+    def _alimento_mais_proximo(self, alimentos, mapa=None):
         if not alimentos:
             return None
         
-        alimento_proximo = min(alimentos, key=lambda a: self._calcular_distancia(a))
+        # Filtrar alimentos para considerar apenas os que não têm água no caminho
+        # e estão longe de paredes
+        alimentos_seguros = []
+        for alimento in alimentos:
+            distancia = self._calcular_distancia(alimento)
+            # Só considera comida num raio de 250px
+            if distancia < 250:
+                seguro = True
+                
+                # Verificar se há água no caminho se a criatura não sabe nadar
+                if mapa and self.velocidade_nado <= 0:
+                    if self._ha_agua_no_caminho(alimento.x, alimento.y, mapa):
+                        seguro = False
+                
+                # Verificar se o alimento está perto demais de uma parede
+                if mapa and seguro:
+                    if self._ha_parede_no_caminho(alimento.x, alimento.y, mapa):
+                        seguro = False
+                
+                if seguro:
+                    alimentos_seguros.append(alimento)
         
-        if self._calcular_distancia(alimento_proximo) < 250:  # Só considera comida num raio de 250px
-            return alimento_proximo
-        return None
+        if not alimentos_seguros:
+            return None
+            
+        # Retorna o alimento mais próximo dentre os seguros
+        return min(alimentos_seguros, key=lambda a: self._calcular_distancia(a))
     
     def _buscar_alimento(self, alimento):
         # Calcular ângulo de direção para o alimento
@@ -256,8 +319,6 @@ class Criatura(CriaturaBase):
                             velocidade_nado=self.velocidade_nado,  # Herda a velocidade de nado
                             WIDTH=self.WIDTH, HEIGHT=self.HEIGHT)
                     return False  # A criatura se transforma e "morre" como presa
-
-
 
                 # Descansar após reproduzir
                 self.tempo_descanso = 60  # 1 segundo de descanso (60 frames a 60 FPS)

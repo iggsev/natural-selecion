@@ -253,7 +253,7 @@ class Menu:
         self.slider_alimentos = pygame_gui.elements.UIHorizontalSlider(
             relative_rect=pygame.Rect((180, elementos_y), (200, 30)),
             start_value=self.configuracoes['n_alimentos'],
-            value_range=(0, 300),
+            value_range=(0, 3000),
             manager=self.gerenciador,
             container=self.painel_geral
         )

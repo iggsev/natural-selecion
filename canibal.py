@@ -1,70 +1,40 @@
 import pygame
 import random
 import math
+from criatura_base import CriaturaBase
+from predador import Predador
 
-class Canibal:
-    contador_id = 0
+class Canibal(CriaturaBase):
+    """Classe para predadores evoluídos que podem caçar outros predadores"""
     
     def __init__(self, x=None, y=None, velocidade=None, stamina=None, tamanho=None, velocidade_nado=None, pai=None, WIDTH=800, HEIGHT=600):
-        # Atribuir ID 
-        Canibal.contador_id += 1
-        self.id = Canibal.contador_id
-        self.WIDTH = WIDTH
-        self.HEIGHT = HEIGHT
+        # Inicializar a classe base primeiro
+        super().__init__(x, y, velocidade, stamina, None, tamanho, velocidade_nado, pai, WIDTH, HEIGHT)
         
-        # Posição
-        self.x = x if x is not None else random.randint(50, WIDTH - 50)
-        self.y = y if y is not None else random.randint(50, HEIGHT - 50)
-        
-        # Se tem pai, herda atributos com mutação
-        if pai:
-            # Taxa de mutação (porcentagem de variação)
-            mutacao = 0.2
-            
-            # Herda com mutação
-            self.velocidade = max(1.8, pai.velocidade * random.uniform(1 - mutacao, 1 + mutacao))
-            self.stamina = max(120, pai.stamina * random.uniform(1 - mutacao, 1 + mutacao))
-            self.tamanho = max(7, pai.tamanho * random.uniform(1 - mutacao, 1 + mutacao))
-            
-            # Herda velocidade de nado com mutação
-            if hasattr(pai, 'velocidade_nado'):
-                self.velocidade_nado = max(0, pai.velocidade_nado * random.uniform(1 - mutacao, 1 + mutacao))
-            else:
-                self.velocidade_nado = 0
-                # Chance de desenvolver velocidade de nado
-                if random.random() < 0.15:
-                    self.velocidade_nado = random.uniform(0.4, 0.8)
+        # Atributos específicos para canibais
+        if pai and isinstance(pai, Canibal):
+            # Herança de atributos já aconteceu no construtor da classe base
+            pass  # As mutações já foram aplicadas na classe base
         else:
             # Atributos para canibais novos
             self.velocidade = velocidade if velocidade is not None else random.uniform(2.5, 4.0)
             self.stamina = stamina if stamina is not None else random.uniform(180, 280)
             self.tamanho = tamanho if tamanho is not None else random.uniform(9, 14)
             
-            # Velocidade de nado
-            if velocidade_nado is not None:
-                self.velocidade_nado = velocidade_nado
-            else:
+            # Canibais vivem mais
+            self.longevidade = random.uniform(700, 1400)  # Canibais vivem ainda mais
+            
+            # Canibais são mais adaptáveis à água
+            if velocidade_nado is None:
                 # Canibais são mais adaptáveis, maior chance de habilidade de nado
                 self.velocidade_nado = 0
                 if random.random() < 0.25:  # 25% de chance
                     self.velocidade_nado = random.uniform(0.4, 1.0)
         
-        # Status dinâmicos
-        self.energia = self.stamina * 0.7  # Começa com 70% da stamina máxima
-        self.direcao = random.uniform(0, 2 * math.pi)
-        self.velocidade_atual = self.velocidade  # Velocidade afetada pelo terreno
-        self.direção_bloqueada = False  # Para efeito de terrenos como gelo
+        # Status dinâmicos específicos de canibais
         self.tempo_cacar = 0
         self.alvo = None
-        self.idade = 0
-        self.longevidade = random.uniform(700, 1400)  # Canibais vivem ainda mais
-        self.filhos = 0
         self.campo_visao = self.tamanho * 18  # Campo de visão maior que predadores normais
-        
-        # Variáveis para efeito visual de natação
-        self.esta_nadando = False
-        self.contador_nado = 0
-        self.amplitude_nado = random.uniform(0.8, 2.0)
         
         # Inverso da relação entre velocidade terrestre e aquática
         # (quanto mais adaptado à água, menos adaptado ao terreno seco)
@@ -73,6 +43,14 @@ class Canibal:
             # Canibais são mais adaptáveis, então a penalidade é menor
             self.velocidade *= max(0.4, 1 - (self.velocidade_nado * 0.4))
         
+        # Consumo de energia (mais eficiente que predadores normais devido à dieta variada)
+        self.consumo_energia = 0.12 + (self.velocidade / 10)
+        
+        # Calcular cor baseada nos atributos
+        self._calcular_cor()
+    
+    def _calcular_cor(self):
+        """Define a cor baseada nos atributos do canibal"""
         # Cálculo da cor baseada nos atributos (vermelho mais forte para canibais)
         r = 255  # Vermelho máximo para canibais
         # Componente azul baseado na velocidade
@@ -87,22 +65,11 @@ class Canibal:
             r = max(200, r - int(self.velocidade_nado * 30))
         
         self.cor = (r, g, b)
-        
-        # Consumo de energia (mais eficiente que predadores normais devido à dieta variada)
-        self.consumo_energia = 0.12 + (self.velocidade / 10)
     
     def atualizar(self, criaturas, predadores, mapa=None):
-        # Verificar se morreu de velhice
-        self.idade += 1
-        if self.idade >= self.longevidade:
-            return False  # Morreu de velhice
-            
-        # Verificar se morreu de fome
-        if self.energia <= 0:
-            return False  # Morreu de fome
-        
-        # Consumir energia constantemente
-        self.energia -= self.consumo_energia
+        # Chamar o método base primeiro para verificações de vida e energia
+        if not super().atualizar(mapa=mapa):
+            return False  # Morreu de velhice ou fome
         
         # Se não estiver com direção bloqueada pelo terreno
         if not self.direção_bloqueada:
@@ -199,10 +166,8 @@ class Canibal:
         
         return True  # Continua vivo
     
-    def _calcular_distancia(self, outro):
-        return math.sqrt((self.x - outro.x) ** 2 + (self.y - outro.y) ** 2)
-    
     def _encontrar_presa(self, criaturas):
+        """Encontra uma presa potencial dentro do campo de visão"""
         if not criaturas:
             return None
         
@@ -216,6 +181,7 @@ class Canibal:
         return random.choice(presas_proximas)
     
     def _encontrar_predador_alvo(self, predadores):
+        """Encontra um predador para caçar dentro do campo de visão"""
         if not predadores:
             return None
         
@@ -229,15 +195,18 @@ class Canibal:
         return random.choice(predadores_proximos)
     
     def _perseguir_alvo(self):
+        """Direciona o canibal em direção ao alvo"""
         dx = self.alvo.x - self.x
         dy = self.alvo.y - self.y
         self.direcao = math.atan2(dy, dx)
     
     def _movimento_aleatorio(self):
+        """Faz o canibal se mover aleatoriamente"""
         if random.random() < 0.03:  # 3% de chance de mudar de direção
             self.direcao = random.uniform(0, 2 * math.pi)
     
     def _cacar(self, criaturas, predadores):
+        """Tenta capturar e comer uma presa ou outro predador"""
         # Tentar comer criaturas
         for i, criatura in enumerate(criaturas):
             if self._calcular_distancia(criatura) < self.tamanho + criatura.tamanho:
@@ -274,6 +243,7 @@ class Canibal:
         return False
         
     def _reproduzir(self, predadores):
+        """Tenta reproduzir se tiver energia suficiente"""
         # Só reproduz se tiver energia suficiente
         custo_reproducao = self.stamina * 0.4  # 40% da stamina para reproduzir
         
@@ -290,7 +260,7 @@ class Canibal:
                 filho = Canibal(
                     x=self.x + offset_x,
                     y=self.y + offset_y,
-                    pai=self,
+                    pai=self,  # Herdar atributos com mutação
                     WIDTH=self.WIDTH,
                     HEIGHT=self.HEIGHT
                 )
@@ -300,7 +270,23 @@ class Canibal:
         
         return False
     
+    def _desenhar_corpo(self, superficie, pos_x, pos_y, cor_ajustada):
+        """Desenha o corpo do canibal com características distintas"""
+        # Desenhar corpo do canibal
+        pygame.draw.circle(superficie, cor_ajustada, (pos_x, pos_y), int(self.tamanho))
+        
+        # Desenhar contorno (vermelho mais intenso para canibais)
+        cor_contorno = (255, 0, 0)
+        pygame.draw.circle(superficie, cor_contorno, (pos_x, pos_y), int(self.tamanho), 1)
+        
+        # Desenhar "olhos" na direção do movimento (canibais têm olhos mais brilhantes)
+        olho_x = pos_x + math.cos(self.direcao) * (self.tamanho * 0.6)
+        olho_y = pos_y + math.sin(self.direcao) * (self.tamanho * 0.6)
+        cor_olho = (255, 255, 0)  # Olhos amarelos brilhantes
+        pygame.draw.circle(superficie, cor_olho, (int(olho_x), int(olho_y)), max(2, int(self.tamanho / 2.5)))
+    
     def desenhar(self, superficie):
+        """Sobrescreve o método de desenho para incluir o campo de visão específico do canibal"""
         # Desenhar campo de visão como um círculo transparente
         s = pygame.Surface((self.campo_visao*2, self.campo_visao*2), pygame.SRCALPHA)
         pygame.draw.circle(s, (255, 0, 0, 15), (self.campo_visao, self.campo_visao), self.campo_visao)
@@ -315,17 +301,7 @@ class Canibal:
         )
         
         # Desenhar corpo do canibal
-        pygame.draw.circle(superficie, cor_ajustada, (int(self.x), int(self.y)), int(self.tamanho))
-        
-        # Desenhar contorno (vermelho mais intenso para canibais)
-        cor_contorno = (255, 0, 0)
-        pygame.draw.circle(superficie, cor_contorno, (int(self.x), int(self.y)), int(self.tamanho), 1)
-        
-        # Desenhar "olhos" na direção do movimento (canibais têm olhos mais brilhantes)
-        olho_x = self.x + math.cos(self.direcao) * (self.tamanho * 0.6)
-        olho_y = self.y + math.sin(self.direcao) * (self.tamanho * 0.6)
-        cor_olho = (255, 255, 0)  # Olhos amarelos brilhantes
-        pygame.draw.circle(superficie, cor_olho, (int(olho_x), int(olho_y)), max(2, int(self.tamanho / 2.5)))
+        self._desenhar_corpo(superficie, int(self.x), int(self.y), cor_ajustada)
         
         # Desenhar barra de energia
         max_barra = 20
@@ -333,3 +309,7 @@ class Canibal:
         pygame.draw.rect(superficie, (255, 255, 255), (int(self.x) - max_barra//2, int(self.y) - int(self.tamanho) - 5, max_barra, 3))
         cor_barra = (255, 0, 0)  # Barra de energia vermelha mais intensa
         pygame.draw.rect(superficie, cor_barra, (int(self.x) - max_barra//2, int(self.y) - int(self.tamanho) - 5, comprimento_barra, 3))
+    
+    def _obter_cor_barra_energia(self):
+        """Retorna a cor da barra de energia"""
+        return (255, 0, 0)  # Vermelho intenso para canibais

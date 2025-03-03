@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 from terreno import Grama, Lama, Gelo, Agua, Deserto, Montanha, Floresta, Pantano
 from parede import Parede
 
@@ -19,6 +20,26 @@ class Mapa:
         
         # Lista de paredes
         self.paredes = []
+        
+        # Adicionar paredes ao redor do mapa (bordas)
+        self._criar_paredes_bordas()
+    
+    def _criar_paredes_bordas(self):
+        """Cria paredes nos limites do mapa"""
+        espessura_parede = 10  # Espessura das paredes das bordas
+        
+        # Parede superior
+        self.adicionar_parede(0, 0, self.largura, espessura_parede)
+        
+        # Parede inferior
+        self.adicionar_parede(0, self.altura - espessura_parede, self.largura, espessura_parede)
+        
+        # Parede esquerda
+        self.adicionar_parede(0, espessura_parede, espessura_parede, self.altura - 2 * espessura_parede)
+        
+        # Parede direita
+        self.adicionar_parede(self.largura - espessura_parede, espessura_parede, 
+                             espessura_parede, self.altura - 2 * espessura_parede)
     
     def obter_terreno(self, x, y):
         """Retorna o terreno na posição (x, y)"""
@@ -129,6 +150,10 @@ class Mapa:
         
         # Aplica efeito na energia
         entidade.energia += terreno.efeito_energia(entidade)
+        
+        # Limitar a energia à stamina máxima
+        if hasattr(entidade, 'stamina'):
+            entidade.energia = min(entidade.energia, entidade.stamina)
     
     def desenhar(self, superficie):
         """Desenha o mapa na superfície"""
@@ -154,8 +179,30 @@ class Mapa:
         for parede in self.paredes:
             parede.desenhar(superficie)
     
+    def criar_terreno_personalizado(self, percentuais):
+        """Cria um mapa com terrenos baseados nos percentuais fornecidos"""
+        # Cria um dicionário de probabilidades a partir dos percentuais
+        probabilidades = {
+            Grama: percentuais.get('grama', 40) / 100,
+            Lama: percentuais.get('lama', 10) / 100,
+            Gelo: percentuais.get('gelo', 5) / 100,
+            Agua: percentuais.get('agua', 20) / 100,
+            Deserto: percentuais.get('deserto', 10) / 100,
+            Montanha: percentuais.get('montanha', 5) / 100,
+            Floresta: percentuais.get('floresta', 5) / 100,
+            Pantano: percentuais.get('pantano', 5) / 100
+        }
+        
+        # Cria terreno aleatório com as probabilidades fornecidas
+        self.criar_terreno_aleatorio(probabilidades)
+    
     def criar_mapa_predefinido(self, tipo, percentuais_personalizados=None):
         """Cria um mapa predefinido com base no tipo escolhido"""
+        # Limpar paredes existentes (exceto as bordas)
+        self.paredes = []
+        # Recriar as paredes das bordas
+        self._criar_paredes_bordas()
+        
         if tipo == "planicie":
             self._criar_mapa_planicie()
         elif tipo == "ilha":
@@ -191,8 +238,8 @@ class Mapa:
         
         # Adiciona algumas paredes como rochas
         for _ in range(10):
-            x = random.randint(0, self.largura - 30)
-            y = random.randint(0, self.altura - 30)
+            x = random.randint(20, self.largura - 50)
+            y = random.randint(20, self.altura - 50)
             tamanho = random.randint(15, 40)
             self.adicionar_parede(x, y, tamanho, tamanho)
     
@@ -219,7 +266,7 @@ class Mapa:
             x = centro_x + int(math.cos(angulo) * distancia)
             y = centro_y + int(math.sin(angulo) * distancia)
             
-            if 0 <= x < self.largura - 20 and 0 <= y < self.altura - 20:
+            if 20 <= x < self.largura - 40 and 20 <= y < self.altura - 40:
                 tamanho = random.randint(15, 30)
                 self.adicionar_parede(x, y, tamanho, tamanho)
     
@@ -233,18 +280,18 @@ class Mapa:
         espacamento = 100
         
         # Paredes horizontais
-        for y in range(espacamento, self.altura, espacamento):
+        for y in range(espacamento, self.altura - espacamento, espacamento):
             abertura = random.randint(0, self.largura - espacamento)
-            self.adicionar_parede(0, y, abertura, espessura_parede)
+            self.adicionar_parede(espessura_parede, y, abertura - espessura_parede, espessura_parede)
             self.adicionar_parede(abertura + espacamento, y, 
-                                self.largura - abertura - espacamento, espessura_parede)
+                                self.largura - abertura - espacamento - espessura_parede, espessura_parede)
         
         # Paredes verticais
-        for x in range(espacamento, self.largura, espacamento):
+        for x in range(espacamento, self.largura - espacamento, espacamento):
             abertura = random.randint(0, self.altura - espacamento)
-            self.adicionar_parede(x, 0, espessura_parede, abertura)
+            self.adicionar_parede(x, espessura_parede, espessura_parede, abertura - espessura_parede)
             self.adicionar_parede(x, abertura + espacamento, 
-                                espessura_parede, self.altura - abertura - espacamento)
+                                espessura_parede, self.altura - abertura - espacamento - espessura_parede)
         
         # Adiciona áreas de diferentes terrenos
         num_areas = random.randint(5, 10)
@@ -287,8 +334,8 @@ class Mapa:
         # Adiciona muitas paredes como picos montanhosos
         num_picos = random.randint(20, 40)
         for _ in range(num_picos):
-            x = random.randint(0, self.largura - 30)
-            y = random.randint(0, self.altura - 30)
+            x = random.randint(20, self.largura - 40)
+            y = random.randint(20, self.altura - 40)
             largura = random.randint(10, 40)
             altura = random.randint(10, 40)
             self.adicionar_parede(x, y, largura, altura)
@@ -316,8 +363,8 @@ class Mapa:
         # Adiciona algumas paredes espalhadas
         num_paredes = random.randint(10, 20)
         for _ in range(num_paredes):
-            x = random.randint(0, self.largura - 30)
-            y = random.randint(0, self.altura - 30)
+            x = random.randint(20, self.largura - 40)
+            y = random.randint(20, self.altura - 40)
             largura = random.randint(15, 50)
             altura = random.randint(15, 50)
             self.adicionar_parede(x, y, largura, altura)
@@ -349,6 +396,3 @@ class Mapa:
                         continue
                     
                     self.terrenos[x][y] = tipo_terreno()
-
-# Adicionando a importação de math que estava faltando
-import math

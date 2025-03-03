@@ -1,42 +1,28 @@
 import random
 import math
 import pygame
+from criatura_base import CriaturaBase
 
-class Criatura:
-    contador_id = 0
+class Criatura(CriaturaBase):
+    """Classe para criaturas herbívoras (presas)"""
     
-    def __init__(self, x=None, y=None, velocidade=None, stamina=None, longevidade=None, tamanho=None, velocidade_nado=None, comunicacao=None, tipo_comunicacao=None, forma=None, pai=None, WIDTH=800, HEIGHT=600):
-        # Atribuir ID único
-        Criatura.contador_id += 1
-        self.id = Criatura.contador_id
-        self.WIDTH = WIDTH
-        self.HEIGHT = HEIGHT
+    def __init__(self, x=None, y=None, velocidade=None, stamina=None, longevidade=None, 
+                tamanho=None, velocidade_nado=None, comunicacao=None, 
+                tipo_comunicacao=None, forma=None, pai=None, WIDTH=800, HEIGHT=600):
+        # Inicializar a classe base primeiro
+        super().__init__(x, y, velocidade, stamina, longevidade, tamanho, velocidade_nado, pai, WIDTH, HEIGHT)
         
-        # Posição
-        self.x = x if x is not None else random.randint(50, WIDTH - 50)
-        self.y = y if y is not None else random.randint(50, HEIGHT - 50)
-        
-        # Se tem pai, herda atributos com mutação
-        if pai:
+        # Atributos específicos das presas
+        if pai and isinstance(pai, Criatura):
             # Taxa de mutação (porcentagem de variação)
             mutacao = 0.2
             
-            # Herda com mutação
-            self.velocidade = max(1, pai.velocidade * random.uniform(1 - mutacao, 1 + mutacao))
-            self.stamina = max(2000, pai.stamina * random.uniform(1 - mutacao, 1 + mutacao))
-            self.longevidade = max(1000, pai.longevidade * random.uniform(1 - mutacao, 1 + mutacao))
-            self.tamanho = max(3, pai.tamanho * random.uniform(1 - mutacao, 1 + mutacao))
+            # Herda comunicação com mutação
             self.comunicacao = max(1, pai.comunicacao * random.uniform(1 - mutacao, 1 + mutacao))
             self.tipo_comunicacao = pai.tipo_comunicacao
             self.forma = pai.forma
             
-            # Herda velocidade de nado com mutação
-            self.velocidade_nado = max(0, pai.velocidade_nado * random.uniform(1 - mutacao, 1 + mutacao))
-            # Chance de desenvolver velocidade de nado se o pai não tem
-            if self.velocidade_nado < 0.1 and random.random() < 0.05:
-                self.velocidade_nado = random.uniform(0.3, 0.7)
-            
-            # 10% de chance de mutar o tipo de comunicação
+            # 10% de chance de mutar o tipo de comunicação na reprodução
             if random.random() < 0.1:
                 if self.comunicacao > 3:  # Se tiver comunicação alta
                     self.tipo_comunicacao = random.choice(["egoista", "altruista"])
@@ -47,17 +33,7 @@ class Criatura:
                     self.forma = "circulo"
         else:
             # Atributos iniciais para criaturas novas
-            self.velocidade = velocidade if velocidade is not None else random.uniform(1.0, 3.0)
-            self.stamina = stamina if stamina is not None else random.uniform(100, 200)
-            self.longevidade = longevidade if longevidade is not None else random.uniform(500, 1000)
-            self.tamanho = tamanho if tamanho is not None else random.uniform(4, 8)
             self.comunicacao = comunicacao if comunicacao is not None else random.uniform(1.0, 5.0)
-            
-            # Atributo novo: velocidade de nado (normalmente inicia baixa ou zero)
-            # A grande maioria começa sem saber nadar
-            self.velocidade_nado = 0
-            if random.random() < 0.1:  # 10% de chance de ter alguma habilidade inicial
-                self.velocidade_nado = random.uniform(0.3, 0.8)
             
             # Tipo de comunicação e forma
             if tipo_comunicacao is not None:
@@ -77,14 +53,8 @@ class Criatura:
             else:
                 self.forma = "circulo"
         
-        # Status dinâmicos
-        self.energia = self.stamina * 0.8  # Começa com 80% da stamina máxima
-        self.idade = 0
-        self.direcao = random.uniform(0, 2 * math.pi)
-        self.direção_bloqueada = False  # Para efeito de terrenos como gelo
-        self.velocidade_atual = self.velocidade  # Velocidade afetada pelo terreno
+        # Status específicos de criaturas
         self.tempo_descanso = 0
-        self.filhos = 0
         self.ultimo_alimento = 0
         self.campo_visao = self.tamanho * 10 + self.comunicacao * 5  # Campo de visão baseado no tamanho e comunicação
         self.predadores_detectados = []  # Lista de predadores que esta criatura detectou
@@ -92,24 +62,13 @@ class Criatura:
         self.tempo_alerta = 0  # Duração do alerta
         self.direcao_fuga = None  # Direção de fuga compartilhada
         
-        # Variáveis para efeito visual de natação
-        self.esta_nadando = False
-        self.contador_nado = 0
-        self.amplitude_nado = random.uniform(0.5, 1.5)
-        
-        # Inverso da relação entre velocidade terrestre e aquática
-        # (quanto mais adaptado à água, menos adaptado ao terreno seco)
-        if self.velocidade_nado > 0:
-            # Penalidade na velocidade terrestre proporcional à adaptação aquática
-            self.velocidade *= max(0.3, 1 - (self.velocidade_nado * 0.5))
-        
         # Penalidades baseadas nos atributos
         self.consumo_energia = 0.1 + (self.velocidade / 10) + (self.tamanho / 20) + (self.comunicacao / 30)
-        self.custo_reproducao = self.stamina * 0.3  # 30% da stamina para reproduzir
+        self.custo_reproducao = self.stamina * 0.15  # 30% da stamina para reproduzir
         
         # Calcular cor baseada nos atributos
         self._calcular_cor()
-        
+    
     def _calcular_cor(self):
         # Componente vermelho é baixo para presas
         r = 100
@@ -119,7 +78,7 @@ class Criatura:
         b = min(255, int(self.velocidade * 70))
         
         # Adiciona mais azul para criaturas com alta velocidade de nado
-        if hasattr(self, 'velocidade_nado') and self.velocidade_nado > 0:
+        if self.velocidade_nado > 0:
             b = min(255, b + int(self.velocidade_nado * 100))
             # Reduz vermelho para dar aparência mais aquática
             r = max(50, r - int(self.velocidade_nado * 50))
@@ -127,36 +86,10 @@ class Criatura:
         self.cor = (r, g, b)
     
     def atualizar(self, alimentos, criaturas, predadores, mapa=None):
-        # Verificar se morreu de velhice
-        self.idade += 1
-        if self.idade >= self.longevidade:
-            return False  # Morreu de velhice
-        
-        # Verificar se morreu de fome
-        if self.energia <= 0:
-            return False  # Morreu de fome
-        
-        # Verificar se está em água para atualizar estado de natação
-        self.esta_nadando = False
-        if mapa:
-            terreno_atual = mapa.obter_terreno(self.x, self.y)
-            if terreno_atual.nome == "Água":
-                self.esta_nadando = True
-                self.contador_nado += 0.2
-                
-                # Verificar se está se afogando (sem velocidade de nado)
-                if self.velocidade_nado <= 0:
-                    # Chance de desenvolver velocidade de nado em situação de quase afogamento
-                    if random.random() < 0.001:  # Chance muito baixa
-                        self.velocidade_nado = random.uniform(0.2, 0.4)
-                        # Efeito visual de adaptação
-                        if hasattr(mapa, 'simulacao') and hasattr(mapa.simulacao, 'efeitos'):
-                            mapa.simulacao.efeitos.adicionar_texto_flutuante(
-                                self.x, self.y - 20,
-                                "Adaptação aquática!",
-                                (0, 200, 255)
-                            )
-        
+        # Chamar o método base primeiro para verificações de vida e energia
+        if not super().atualizar(mapa=mapa):
+            return False  # Morreu de velhice ou fome
+            
         # Se estiver descansando, diminuir o tempo de descanso
         if self.tempo_descanso > 0:
             self.tempo_descanso -= 1
@@ -170,9 +103,6 @@ class Criatura:
             if self.tempo_alerta == 0:
                 self.alertada = False
                 self.direcao_fuga = None
-        
-        # Consumir energia constantemente (metabolismo basal)
-        self.energia -= self.consumo_energia
         
         # Detectar predadores no campo de visão
         self.predadores_detectados = []
@@ -230,22 +160,9 @@ class Criatura:
         
         # Tentar reproduzir
         self._reproduzir(criaturas)
-        
-        # 0.5% de chance de mutar para predador na reprodução
-        if random.random() < 0.005 and self.idade > 200:  # Menos frequente e apenas em criaturas maduras
-            # Importação local para evitar dependência circular
-            from predador import Predador
-            novo_predador = Predador(x=self.x, y=self.y, velocidade=self.velocidade*1.2, 
-                        stamina=self.stamina*1.2, tamanho=self.tamanho*1.2, 
-                        velocidade_nado=self.velocidade_nado,  # Herda a velocidade de nado
-                        WIDTH=self.WIDTH, HEIGHT=self.HEIGHT)
-            predadores.append(novo_predador)
-            return False  # A criatura se transforma e "morre" como presa
+    
         
         return True  # Continua vivo
-    
-    def _calcular_distancia(self, outro):
-        return math.sqrt((self.x - outro.x) ** 2 + (self.y - outro.y) ** 2)
     
     def _alimento_mais_proximo(self, alimentos):
         if not alimentos:
@@ -319,70 +236,40 @@ class Criatura:
                 offset_x = random.uniform(-20, 20)
                 offset_y = random.uniform(-20, 20)
                 
-                filho = Criatura(
-                    x=self.x + offset_x,
-                    y=self.y + offset_y,
-                    pai=self,
-                    WIDTH=self.WIDTH,
-                    HEIGHT=self.HEIGHT
-                )
+                if random.random() < 0.99:
+                    filho = Criatura(
+                        x=self.x + offset_x,
+                        y=self.y + offset_y,
+                        pai=self,  # Aqui é onde ocorre a herança de atributos com mutação
+                        WIDTH=self.WIDTH,
+                        HEIGHT=self.HEIGHT
+                    )
                 
-                criaturas.append(filho)
-                
+                    criaturas.append(filho)
+                else:
+                    from predador import Predador
+                    novo_predador = Predador(x=self.x, y=self.y, velocidade=self.velocidade, 
+                            stamina=self.stamina, tamanho=self.tamanho, 
+                            velocidade_nado=self.velocidade_nado,  # Herda a velocidade de nado
+                            WIDTH=self.WIDTH, HEIGHT=self.HEIGHT)
+                    return False  # A criatura se transforma e "morre" como presa
+
+
+
                 # Descansar após reproduzir
                 self.tempo_descanso = 60  # 1 segundo de descanso (60 frames a 60 FPS)
                 return True
         
         return False
     
-    def desenhar(self, superficie):
-        # Desenhar campo de visão como um círculo transparente
-        if self.comunicacao > 1:
-            s = pygame.Surface((self.campo_visao*2, self.campo_visao*2), pygame.SRCALPHA)
-            
-            # Cor do campo de visão baseada no tipo de comunicação
-            if self.tipo_comunicacao == "egoista":
-                cor_campo = (180, 180, 0, 10)  # Amarelo para egoísta
-            elif self.tipo_comunicacao == "altruista":
-                cor_campo = (0, 200, 200, 10)  # Ciano para altruísta
-            else:
-                cor_campo = (100, 100, 100, 5)  # Cinza para sem comunicação
-                
-            pygame.draw.circle(s, cor_campo, (self.campo_visao, self.campo_visao), self.campo_visao)
-            superficie.blit(s, (int(self.x - self.campo_visao), int(self.y - self.campo_visao)))
-        
-        # Ajustar cor baseada na idade (fica mais clara conforme envelhece)
-        idade_rel = min(1.0, self.idade / self.longevidade)
-        cor_ajustada = (
-            min(255, self.cor[0] + int(40 * idade_rel)),
-            min(255, self.cor[1] + int(40 * idade_rel)),
-            min(255, self.cor[2] + int(40 * idade_rel))
-        )
-        
-        # Destacar se estiver alertada
+    def _desenhar_corpo(self, superficie, pos_x, pos_y, cor_ajustada):
+        """Desenha o corpo da criatura baseado no seu tipo de comunicação"""
+        # Determinar a cor do contorno
         if self.alertada:
             cor_contorno = (255, 255, 0)  # Amarelo para alertada
         else:
-            cor_contorno = (255, 255, 255)
-        
-        # Posição ajustada para efeito de natação
-        pos_x = int(self.x)
-        pos_y = int(self.y)
-        
-        # Se estiver nadando, adicionar efeitos visuais de natação
-        if self.esta_nadando:
-            # Ondulação vertical senoidal para simular movimento de nado
-            ondulacao = math.sin(self.contador_nado) * self.amplitude_nado
-            pos_y += int(ondulacao)
+            cor_contorno = (255, 255, 255)  # Branco normal
             
-            # Rastro de bolhas na água (representando movimento)
-            if random.random() < 0.2 and hasattr(self, 'velocidade_nado') and self.velocidade_nado > 0:
-                # Cria pequenas bolhas atrás da criatura
-                bolha_x = pos_x - math.cos(self.direcao) * (self.tamanho + 2)
-                bolha_y = pos_y - math.sin(self.direcao) * (self.tamanho + 2)
-                pygame.draw.circle(superficie, (200, 240, 255, 150), (int(bolha_x), int(bolha_y)), 
-                                 random.randint(1, max(2, int(self.velocidade_nado * 3))))
-        
         # Desenhar forma baseada no tipo de comunicação
         if self.forma == "quadrado":
             # Quadrado para comunicação egoísta
@@ -415,7 +302,7 @@ class Criatura:
         olho_y = pos_y + math.sin(self.direcao) * (self.tamanho * 0.6)
         
         # Ajuste nos olhos para criaturas aquáticas
-        if hasattr(self, 'velocidade_nado') and self.velocidade_nado > 0.5:
+        if self.velocidade_nado > 0.5:
             # Olhos maiores para criaturas aquáticas
             tamanho_olho = max(1, int(self.tamanho / 2.5))
             cor_olho = (0, 0, 0) if not self.esta_nadando else (0, 150, 200)
@@ -424,14 +311,8 @@ class Criatura:
             # Olhos normais
             pygame.draw.circle(superficie, (0, 0, 0), (int(olho_x), int(olho_y)), max(1, int(self.tamanho / 3)))
         
-        # Desenhar barra de energia
-        max_barra = 20
-        comprimento_barra = max(1, int((self.energia / self.stamina) * max_barra))
-        pygame.draw.rect(superficie, (255, 255, 255), (pos_x - max_barra//2, pos_y - int(self.tamanho) - 5, max_barra, 3))
-        pygame.draw.rect(superficie, (0, 255, 0), (pos_x - max_barra//2, pos_y - int(self.tamanho) - 5, comprimento_barra, 3))
-        
         # Indicador visual de velocidade de nado para criaturas aquáticas
-        if hasattr(self, 'velocidade_nado') and self.velocidade_nado > 0:
+        if self.velocidade_nado > 0:
             # Desenhar pequenas barbatanas ou indicação de adaptação aquática
             # Barbatanas laterais
             barbatana_x1 = pos_x + math.cos(self.direcao + math.pi/2) * self.tamanho
@@ -450,3 +331,54 @@ class Criatura:
             # Desenhar barbatanas
             pygame.draw.line(superficie, (0, 150, 220), (barbatana_x1, barbatana_y1), (ponta_x1, ponta_y1), max(1, int(self.tamanho/4)))
             pygame.draw.line(superficie, (0, 150, 220), (barbatana_x2, barbatana_y2), (ponta_x2, ponta_y2), max(1, int(self.tamanho/4)))
+    
+    def desenhar(self, superficie):
+        """Sobrescreve o método da classe base para campo de visão específico"""
+        # Desenhar campo de visão como um círculo transparente
+        if self.comunicacao > 1:
+            s = pygame.Surface((self.campo_visao*2, self.campo_visao*2), pygame.SRCALPHA)
+            
+            # Cor do campo de visão baseada no tipo de comunicação
+            if self.tipo_comunicacao == "egoista":
+                cor_campo = (180, 180, 0, 10)  # Amarelo para egoísta
+            elif self.tipo_comunicacao == "altruista":
+                cor_campo = (0, 200, 200, 10)  # Ciano para altruísta
+            else:
+                cor_campo = (100, 100, 100, 5)  # Cinza para sem comunicação
+                
+            pygame.draw.circle(s, cor_campo, (self.campo_visao, self.campo_visao), self.campo_visao)
+            superficie.blit(s, (int(self.x - self.campo_visao), int(self.y - self.campo_visao)))
+        
+        # Chamar o método de desenho base para os elementos comuns
+        super()._desenhar_corpo(superficie, int(self.x), int(self.y), self.cor)
+        
+        # Ajustar cor baseada na idade (fica mais clara conforme envelhece)
+        idade_rel = min(1.0, self.idade / self.longevidade)
+        cor_ajustada = (
+            min(255, self.cor[0] + int(40 * idade_rel)),
+            min(255, self.cor[1] + int(40 * idade_rel)),
+            min(255, self.cor[2] + int(40 * idade_rel))
+        )
+        
+        # Posição ajustada para efeito de natação
+        pos_x = int(self.x)
+        pos_y = int(self.y)
+        
+        # Se estiver nadando, adicionar efeitos visuais de natação
+        if self.esta_nadando:
+            # Ondulação vertical senoidal para simular movimento de nado
+            ondulacao = math.sin(self.contador_nado) * self.amplitude_nado
+            pos_y += int(ondulacao)
+        
+        # Desenhar corpo específico para criaturas
+        self._desenhar_corpo(superficie, pos_x, pos_y, cor_ajustada)
+        
+        # Desenhar barra de energia
+        max_barra = 20
+        comprimento_barra = max(1, int((self.energia / self.stamina) * max_barra))
+        pygame.draw.rect(superficie, (255, 255, 255), (pos_x - max_barra//2, pos_y - int(self.tamanho) - 5, max_barra, 3))
+        pygame.draw.rect(superficie, (0, 255, 0), (pos_x - max_barra//2, pos_y - int(self.tamanho) - 5, comprimento_barra, 3))
+    
+    def _obter_cor_barra_energia(self):
+        """Retorna a cor da barra de energia"""
+        return (0, 255, 0)  # Verde para presas

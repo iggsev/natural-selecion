@@ -6,7 +6,7 @@ class Canibal:
     contador_id = 0
     
     def __init__(self, x=None, y=None, velocidade=None, stamina=None, tamanho=None, velocidade_nado=None, pai=None, WIDTH=800, HEIGHT=600):
-        # Atribuir ID único
+        # Atribuir ID 
         Canibal.contador_id += 1
         self.id = Canibal.contador_id
         self.WIDTH = WIDTH
